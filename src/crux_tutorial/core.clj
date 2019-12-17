@@ -11,6 +11,9 @@
   []
   (println "Hello"))
 
+; tutorial from https://nextjournal.com/crux-tutorial
+
+; SETUP ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ; start node
 (def crux
@@ -31,6 +34,8 @@
    :badges "SETUP"
    :cargo ["stereo" "gold fish" "slippers" "secret note"]})
 
+; PUT //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 ; store the document into Crux with PUT command
 
 (crux/submit-tx crux [[:crux.tx/put manifest]])
@@ -38,6 +43,7 @@
 ; Check that this was successful by asking Crux to show the whole entity.
 (crux/entity (crux/db crux) :manifest)
 
+; ------------------------ easy-ingenst --------------------------------------------------------------------------------
 (defn easy-ingest
   "Uses Crux put transaction to add a vector of documents to a specified node"
   [node docs]
@@ -51,28 +57,47 @@
 (crux/entity (crux/db crux) :demo)
 ;{:crux.db/id :demo, :name "Zoltan"}
 
-; batch all updates into a transaction
-(crux/submit-tx crux
-                [[:crux.tx/put
-                  {:crux.db/id :commodity/Pu
-                   :common-name "Plutonium"
-                   :type :element/metal
-                   :density 19.816
-                   :radioactive true}]
+(def data
+  [{:crux.db/id :commodity/Pu
+    :common-name "Plutonium"
+    :type :element/metal
+    :density 19.816
+    :radioactive true}
 
-                 [:crux.tx/put
-                  {:crux.db/id :commodity/N
-                   :common-name "Nitrogen"
-                   :type :element/gas
-                   :density 1.2506
-                   :radioactive false}]
+   {:crux.db/id :commodity/N
+    :common-name "Nitrogen"
+    :type :element/gas
+    :density 1.2506
+    :radioactive false}
 
-                 [:crux.tx/put
-                  {:crux.db/id :commodity/CH4
-                   :common-name "Methane"
-                   :type :molecule/gas
-                   :density 0.717
-                   :radioactive false}]])
+   {:crux.db/id :commodity/CH4
+    :common-name "Methane"
+    :type :molecule/gas
+    :density 0.717
+    :radioactive false}
+
+   {:crux.db/id :commodity/Au
+    :common-name "Gold"
+    :type :element/metal
+    :density 19.300
+    :radioactive false}
+
+   {:crux.db/id :commodity/C
+    :common-name "Carbon"
+    :type :element/non-metal
+    :density 2.267
+    :radioactive false}
+
+   {:crux.db/id :commodity/borax
+    :common-name "Borax"
+    :IUPAC-name "Sodium tetraborate decahydrate"
+    :other-names ["Borax decahydrate" "sodium borate" "sodium tetraborate" "disodium tetraborate"]
+    :type :mineral/solid
+    :appearance "white solid"
+    :density 1.73
+    :radioactive false}])
+
+(easy-ingest crux data)
 
 ; Get back
 (crux/entity (crux/db crux) :commodity/Pu)
@@ -103,23 +128,96 @@
 ; will return nil
 (crux/entity (crux/db crux) :stock/Pu)
 
-; searching
-; #{[:commodity/Pu]}
+; DATALOG-QUERIES //////////////////////////////////////////////////////////////////////////////////////////////////////
+
+; This basic query is returning all the elements that are defined as :element/metal. The :find clause tells Crux the variables you want to return
 (crux/q (crux/db crux)
         '{:find [element]
           :where [[element :type :element/metal]]} )
-;#{[:commodity/Pu]}
+;#{[:commodity/Pu] [:commodity/Au]}
 
-; you can also write it like this as well
-(crux/q (crux/db crux)
+; different flavours for writing the crux/q
+(=
+ (crux/q (crux/db crux)
+         '{:find [element]
+           :where [[element :type :element/metal]]})
+
+ (crux/q (crux/db crux)
+         {:find '[element]
+          :where '[[element :type :element/metal]]})
+
+ (crux/q (crux/db crux)
          (quote
-          {:find [element]
-           :where [[element :type :element/metal]]}) )
-#{[:commodity/Pu]}
+           {:find [element]
+            :where [[element :type :element/metal]]})))
+; true
 
-; instead of returning the id we can return the name
+; Return the name of metal elements.
+; Here we have bound the results of type :element/metal to e.
 (crux/q (crux/db crux)
         '{:find [name]
           :where [[e :type :element/metal]
                   [e :common-name name]]} )
-;#{["Plutonium"]}
+;#{["Gold"] ["Plutonium"]
+
+; You can pull out as much data as you want into your result tuples by adding additional variables to the :find clause.
+(crux/q (crux/db crux)
+        '{:find [name density]
+          :where [[e :density density]
+                  [e :common-name name]]})
+;#{["Nitrogen" 1.2506] ["Carbon" 2.267] ["Methane" 0.717] ["Borax" 1.73] ["Gold" 19.3] ["Plutonium" 19.816]}
+
+; ------------------------ arguments -----------------------------------------------------------------------------------
+
+; We could have done that before inside the :where clause, but using :args removes the need for hard-coding inside the query clauses.
+(crux/q (crux/db crux)
+        {:find '[name]
+         :where '[[e :type t]
+                  [e :common-name name]]
+         :args [{'t :element/metal}]})
+
+; ------------------------ filters -------------------------------------------------------------------------------------
+
+(defn filter-type
+  [type]
+  (crux/q (crux/db crux)
+          {:find '[name]
+           :where '[[e :type t]
+                    [e :common-name name]]
+           :args [{'t type}]}))
+
+(filter-type :element/metal)
+; #{["Gold"] ["Plutonium"]}
+
+(defn filter-appearance
+  [description]
+  (crux/q (crux/db crux)
+          {:find '[name IUPAC]
+           :where '[[e :common-name name]
+                    [e :IUPAC-name IUPAC]
+                    [e :appearance ?appearance]]
+           :args [{'?appearance description}]}))
+
+(filter-appearance "white solid")
+; #{["Borax" "Sodium tetraborate decahydrate"]}
+
+; You update your manifest with the latest badge. :)
+(crux/submit-tx
+ crux
+ [[:crux.tx/put
+   {:crux.db/id :manifest
+    :pilot-name "Johanna"
+    :id/rocket "SB002-sol"
+    :id/employee "22910x2"
+    :badges ["SETUP" "PUT" "DATALOG-QUERIES"]
+    :cargo ["stereo" "gold fish" "slippers" "secret note"]}]])
+; #:crux.tx{:tx-id 1614436347963394, :tx-time #inst "2019-12-17T15:53:16.058-00:00"}
+
+; BITEMP ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+; CAS //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+; DELETE ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+; EVICT ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
