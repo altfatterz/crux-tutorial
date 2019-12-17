@@ -215,6 +215,92 @@
 
 ; BITEMP ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+; One or more documents can be inserted into Crux via a put transaction at a specific valid-time.
+; The valid-time can be any time (past, future or present).
+; If no valid-time is provided, Crux will default to the transaction time, i.e. the present. Each document survives until it is deleted or a new version of it is added
+
+(crux/submit-tx
+ crux
+ [[:crux.tx/put
+   {:crux.db/id :consumer/RJ29sUU
+    :consumer-id :RJ29sUU
+    :first-name "Jay"
+    :last-name "Rose"
+    :cover? true
+    :cover-type :Full}
+   #inst "2114-12-03"]])
+; #:crux.tx{:tx-id 1614437551443970, :tx-time #inst "2019-12-17T16:12:51.332-00:00"}
+
+; The company needs to know the history of insurance for each cover.
+(crux/submit-tx
+ crux
+ [[:crux.tx/put	;; (1)
+   {:crux.db/id :consumer/RJ29sUU
+    :consumer-id :RJ29sUU
+    :first-name "Jay"
+    :last-name "Rose"
+    :cover? true
+    :cover-type :Full}
+   #inst "2113-12-03" ;; Valid time start
+   #inst "2114-12-03"] ;; Valid time end
+
+  [:crux.tx/put  ;; (2)
+   {:crux.db/id :consumer/RJ29sUU
+    :consumer-id :RJ29sUU
+    :first-name "Jay"
+    :last-name "Rose"
+    :cover? true
+    :cover-type :Full}
+   #inst "2112-12-03"
+   #inst "2113-12-03"]
+
+  [:crux.tx/put	;; (3)
+   {:crux.db/id :consumer/RJ29sUU
+    :consumer-id :RJ29sUU
+    :first-name "Jay"
+    :last-name "Rose"
+    :cover? false}
+   #inst "2112-06-03"
+   #inst "2112-12-02"]
+
+  [:crux.tx/put ;; (4)
+   {:crux.db/id :consumer/RJ29sUU
+    :consumer-id :RJ29sUU
+    :first-name "Jay"
+    :last-name "Rose"
+    :cover? true
+    :cover-type :Promotional}
+   #inst "2111-06-03"
+   #inst "2112-06-03"]])
+; #:crux.tx{:tx-id 1614437751981057, :tx-time #inst "2019-12-17T16:16:07.169-00:00"}
+
+; Check what kind of cover the customer had at different times
+(crux/q (crux/db crux #inst "2115-07-03")
+        '{:find [cover type]
+          :where [[e :consumer-id :RJ29sUU]
+                  [e :cover? cover]
+                  [e :cover-type type]]})
+; #{[true :Full]}
+
+(crux/q (crux/db crux #inst "2111-07-03")
+        '{:find [cover type]
+          :where [[e :consumer-id :RJ29sUU]
+                  [e :cover? cover]
+                  [e :cover-type type]]})
+; #{[true :Promotional]}
+
+; You update your manifest with the latest badge. :)
+(crux/submit-tx
+ crux
+ [[:crux.tx/put
+   {:crux.db/id :manifest
+    :pilot-name "Johanna"
+    :id/rocket "SB002-sol"
+    :id/employee "22910x2"
+    :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP"]
+    :cargo ["stereo" "gold fish" "slippers" "secret note"]}]])
+;#:crux.tx{:tx-id 1614438350412802, :tx-time #inst "2019-12-17T16:25:51.575-00:00"}
+
 ; CAS //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ; DELETE ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
