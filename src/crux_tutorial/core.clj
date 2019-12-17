@@ -102,3 +102,24 @@
 
 ; will return nil
 (crux/entity (crux/db crux) :stock/Pu)
+
+; searching
+; #{[:commodity/Pu]}
+(crux/q (crux/db crux)
+        '{:find [element]
+          :where [[element :type :element/metal]]} )
+;#{[:commodity/Pu]}
+
+; you can also write it like this as well
+(crux/q (crux/db crux)
+         (quote
+          {:find [element]
+           :where [[element :type :element/metal]]}) )
+#{[:commodity/Pu]}
+
+; instead of returning the id we can return the name
+(crux/q (crux/db crux)
+        '{:find [name]
+          :where [[e :type :element/metal]
+                  [e :common-name name]]} )
+;#{["Plutonium"]}
